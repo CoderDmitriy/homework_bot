@@ -62,12 +62,17 @@ def send_message(bot, message):
         logger.info(f'Сообщение в чат {TELEGRAM_CHAT_ID}:{message}')
         return True
     except SendException('Ошибка отправки сообщения в телеграмм'):
-            logger.error('Ошибка отправки сообщения в телеграмм')
-            raise SendException
-
+        logger.error('Ошибка отправки сообщения в телеграмм')
+        raise SendException
 
 
 def get_api_answer(current_timestamp):
+    """
+    Делает запрос к единственному эндпоинту API-сервиса.
+    В качестве параметра функция получает временную метку.
+    В случае успешного запроса должна вернуть ответ API,
+    преобразовав его из формата json к типам данных Python.
+    """
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     if timestamp is None or params is None:
@@ -75,9 +80,9 @@ def get_api_answer(current_timestamp):
         raise ParametersApiException('Ошибка параметров для запроса к API')
     try:
         homework_statuses = requests.get(ENDPOINT,
-                                        headers=HEADERS,
-                                        params=params
-                                        )
+                                         headers=HEADERS,
+                                         params=params,
+                                         )
     except GetApiAnswerException as error:
         logging.error(f'Ошибка при запросе к API: {error}')
         raise GetApiAnswerException
@@ -93,14 +98,15 @@ def get_api_answer(current_timestamp):
 
 
 def check_response(response):
-    """ Проверяет ответ API на коррекность.
+    """
+    Проверяет ответ API на коррекность.
     В качестве параметра функция получает ответ API.
     Ответ приведен к типам данных Python.
     Если ответ API соответствует ожиданиям то функция должна вернуть
     список домашних работ(он может быть и пустым)
     доступный в ответе по ключу API 'homeworks'
     """
-    if isinstance(type (response), dict):
+    if isinstance(type(response), dict):
         raise TypeError('Ответ API отличен от словаря')
     try:
         list_works = response['homeworks']
@@ -116,6 +122,15 @@ def check_response(response):
 
 
 def parse_status(homework):
+    """
+    Излекает из информации о конкретной домашней работе статус этой работы.
+    В качестве параметра функция получает
+    всего один элемент из списка домашних работ
+    В случае успеха, функция возращает
+    подготовленную для отправки в телеграмм строку,
+    содержающую один из вердиктов словаря
+    HOMEWORK_STATUSES.
+    """
     if 'homework_name' not in homework:
         raise KeyError('Отсутствует ключ "homework_name" в ответе API')
     if homework.get('status') is None:
@@ -129,13 +144,13 @@ def parse_status(homework):
 
 
 def check_tokens():
-    """ 
-    Проверяет доступность переменных окружения, 
-    необходимых для работы.
-    Если отсутствует хотя бы одна перменная окружения функция
-    должна вернуть False или True 
     """
-    if all ([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
+    Проверяет доступность переменных окружения.
+    необходимых для работы
+    Если отсутствует хотя бы одна перменная окружения функция
+    должна вернуть False или True
+    """
+    if all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
         return True
     return False
 
