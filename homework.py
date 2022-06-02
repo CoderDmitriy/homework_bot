@@ -1,29 +1,22 @@
+import logging
+import json
 import os
 import time
-import logging
-from logging.handlers import RotatingFileHandler
-from exceptions import (GetApiAnswerException,
-                        ParametersApiException,
-                        ParseApiException,
-                        SendException,
-                        UnknownStatusException)
-import requests
-from dotenv import load_dotenv
-import telegram
-
 from http import HTTPStatus
+from logging.handlers import RotatingFileHandler
+
+import requests
+import telegram
+from dotenv import load_dotenv
+
+from exceptions import (GetApiAnswerException, ParametersApiException,
+                        UnknownStatusException)
 
 load_dotenv()
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename='main.log',
-    format='%(asctime)s, %(levelname)s, %(message)s, %(funcName)s',
-)
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 handler = RotatingFileHandler('my_logger.log',
-                              encoding='UTF-8',
                               maxBytes=50000000,
                               backupCount=5
                               )
@@ -61,9 +54,8 @@ def send_message(bot, message):
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.info(f'Сообщение в чат {TELEGRAM_CHAT_ID}:{message}')
         return True
-    except SendException('Ошибка отправки сообщения в телеграмм'):
-        logger.error('Ошибка отправки сообщения в телеграмм')
-        raise SendException
+    except telegram.TelegramError:
+        logger.info('Ошибка отправки сообщения')
 
 
 def get_api_answer(current_timestamp):
@@ -76,7 +68,7 @@ def get_api_answer(current_timestamp):
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     if timestamp is None or params is None:
-        logging.error('Ошибка параметров для запроса к API')
+        logger.error('Ошибка параметров для запроса к API')
         raise ParametersApiException('Ошибка параметров для запроса к API')
     try:
         homework_statuses = requests.get(ENDPOINT,
@@ -92,9 +84,9 @@ def get_api_answer(current_timestamp):
         raise GetApiAnswerException(f'Ошибка {status_code}')
     try:
         return homework_statuses.json()
-    except ParseApiException:
+    except json.decoder.JSONDecodeError as json_error:
         logger.error('Ошибка парсинга ответа из формата json')
-        raise ParseApiException
+        raise json_error
 
 
 def check_response(response):
@@ -106,18 +98,13 @@ def check_response(response):
     список домашних работ(он может быть и пустым)
     доступный в ответе по ключу API 'homeworks'
     """
-    if isinstance(type(response), dict):
-        raise TypeError('Ответ API отличен от словаря')
-    try:
-        list_works = response['homeworks']
-    except KeyError:
-        logger.error('Ошибка словаря по ключу homeworks')
-        raise KeyError('Ошибка словаря по ключу homeworks')
-    try:
-        homework = list_works[0]
-    except IndexError:
-        logger.error('Список домашних работ пуст')
-        raise IndexError('Список домашних работ пуст')
+    if not isinstance(response, dict):
+        raise TypeError('Запрос не соответвует формату')
+    homework = response.get('homeworks')
+    if homework is None:
+        raise KeyError('Нет ключа homeworks')
+    if not isinstance(homework, list):
+        raise TypeError('Ответ не является списком')
     return homework
 
 
@@ -164,7 +151,6 @@ def main():
     if not check_tokens():
         logger.critical('Отсутствует одна или несколько переменных окружения')
         message = 'Отсутствует одна или несколько переменных окружения'
-        send_message(bot, message)
         raise Exception('Отсутствует одна или несколько переменных окружения')
     while True:
         try:
@@ -174,14 +160,14 @@ def main():
             if message != MESSAGE_STATUS:
                 send_message(bot, message)
                 MESSAGE_STATUS = message
-            time.sleep(RETRY_TIME)
         except Exception as error:
             logger.error(error)
             message_info = str(error)
             if message_info != ERROR_CACHE_MESSAGE:
                 send_message(bot, message_info)
                 ERROR_CACHE_MESSAGE = message_info
-        time.sleep(RETRY_TIME)
+        finally:
+            time.sleep(RETRY_TIME)
 
 
 if __name__ == '__main__':
