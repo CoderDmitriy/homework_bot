@@ -10,7 +10,7 @@ import telegram
 from dotenv import load_dotenv
 
 from exceptions import (GetApiAnswerException, ParametersApiException,
-                        UnknownStatusException)
+                        UnknownStatusException,)
 
 load_dotenv()
 
@@ -53,7 +53,6 @@ def send_message(bot, message):
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.info(f'Сообщение в чат {TELEGRAM_CHAT_ID}:{message}')
-        return True
     except telegram.TelegramError:
         logger.info('Ошибка отправки сообщения')
 
@@ -87,6 +86,9 @@ def get_api_answer(current_timestamp):
     except json.decoder.JSONDecodeError as json_error:
         logger.error('Ошибка парсинга ответа из формата json')
         raise json_error
+    except ConnectionError as conn_error:
+        logger.error('Ошибка соединения')
+        raise conn_error
 
 
 def check_response(response):
@@ -101,7 +103,7 @@ def check_response(response):
     if not isinstance(response, dict):
         raise TypeError('Запрос не соответвует формату')
     homework = response.get('homeworks')
-    if homework is None:
+    if 'homeworks' in homework:
         raise KeyError('Нет ключа homeworks')
     if not isinstance(homework, list):
         raise TypeError('Ответ не является списком')
@@ -120,7 +122,7 @@ def parse_status(homework):
     """
     if 'homework_name' not in homework:
         raise KeyError('Отсутствует ключ "homework_name" в ответе API')
-    if homework.get('status') is None:
+    if 'homework_status' in homework:
         raise KeyError('Отсутствует ключ "status" в ответе API')
     homework_name = homework['homework_name']
     homework_status = homework['status']
@@ -137,9 +139,7 @@ def check_tokens():
     Если отсутствует хотя бы одна перменная окружения функция
     должна вернуть False или True
     """
-    if all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
-        return True
-    return False
+    return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
 def main():

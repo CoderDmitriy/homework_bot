@@ -1,4 +1,9 @@
+
 class GetApiAnswerException(Exception):
+    pass
+
+
+class ParseApiException(Exception):
     pass
 
 
